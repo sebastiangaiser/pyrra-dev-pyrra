@@ -258,6 +258,8 @@ func cmdFilesystem(logger log.Logger, reg *prometheus.Registry, promClient api.C
 			connect.WithInterceptors(prometheusInterceptor),
 		))
 		router.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+		router.HandleFunc("/healthz", okHandler)
+		router.HandleFunc("/readyz", filesystemReadyHandler(configFiles))
 
 		server := http.Server{
 			Addr:    ":9444",
@@ -451,6 +453,34 @@ func writeRuleSpec(_ log.Logger, kubeObjective v1alpha1.ServiceLevelObjective, r
 		return fmt.Errorf("failed to write file %q: %w", path, err)
 	}
 	return nil
+}
+
+// filesystemReadyHandler returns a readiness handler that verifies the
+// config directory is reachable and the configured config files are still
+// readable. This catches cases where the mount point disappears or file
+// permissions change after startup.
+func filesystemReadyHandler(configFiles string) http.HandlerFunc {
+	dir := filepath.Dir(configFiles)
+	return func(w http.ResponseWriter, _ *http.Request) {
+		if _, err := os.Stat(dir); err != nil {
+			http.Error(w, fmt.Sprintf("config directory %q not accessible: %v", dir, err), http.StatusServiceUnavailable)
+			return
+		}
+		filenames, err := filepath.Glob(configFiles)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to glob config files %q: %v", configFiles, err), http.StatusServiceUnavailable)
+			return
+		}
+		for _, f := range filenames {
+			file, err := os.Open(f)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("config file %q not readable: %v", f, err), http.StatusServiceUnavailable)
+				return
+			}
+			_ = file.Close()
+		}
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
 func objectiveFromFile(file string) (v1alpha1.ServiceLevelObjective, slo.Objective, error) {

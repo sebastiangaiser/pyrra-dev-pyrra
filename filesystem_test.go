@@ -1,6 +1,10 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -55,4 +59,52 @@ func TestMatchObjectives(t *testing.T) {
 	require.Contains(t, matches, obj2)
 	require.Contains(t, matches, obj3)
 	require.Contains(t, matches, obj4)
+}
+
+func TestFilesystemReadyHandler(t *testing.T) {
+	dir := t.TempDir()
+
+	// Empty glob: no files matched — handler should still report ready.
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rr := httptest.NewRecorder()
+	filesystemReadyHandler(filepath.Join(dir, "*.yaml"))(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	// Existing readable file: ready.
+	file := filepath.Join(dir, "slo.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("name: test"), 0o644))
+	rr = httptest.NewRecorder()
+	filesystemReadyHandler(filepath.Join(dir, "*.yaml"))(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	// File goes missing after glob: handler should return 503.
+	require.NoError(t, os.Remove(file))
+	require.NoError(t, os.Symlink(filepath.Join(dir, "missing.yaml"), file))
+	rr = httptest.NewRecorder()
+	filesystemReadyHandler(filepath.Join(dir, "*.yaml"))(rr, req)
+	require.Equal(t, http.StatusServiceUnavailable, rr.Code)
+
+	// File exists but is not readable: handler should return 503.
+	// Skipped when running as root (root bypasses permission bits).
+	if os.Geteuid() != 0 {
+		require.NoError(t, os.Remove(file))
+		require.NoError(t, os.WriteFile(file, []byte("name: test"), 0o000))
+		rr = httptest.NewRecorder()
+		filesystemReadyHandler(filepath.Join(dir, "*.yaml"))(rr, req)
+		require.Equal(t, http.StatusServiceUnavailable, rr.Code)
+	}
+
+	// Malformed glob pattern: handler should return 503.
+	rr = httptest.NewRecorder()
+	filesystemReadyHandler("[")(rr, req)
+	require.Equal(t, http.StatusServiceUnavailable, rr.Code)
+
+	// Config directory disappears (e.g. configmap unmounted): handler should return 503.
+	missingDir := filepath.Join(t.TempDir(), "gone")
+	require.NoError(t, os.Mkdir(missingDir, 0o755))
+	handler := filesystemReadyHandler(filepath.Join(missingDir, "*.yaml"))
+	require.NoError(t, os.Remove(missingDir))
+	rr = httptest.NewRecorder()
+	handler(rr, req)
+	require.Equal(t, http.StatusServiceUnavailable, rr.Code)
 }

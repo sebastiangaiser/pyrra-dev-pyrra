@@ -36,9 +36,17 @@ spec:
         - --tls-private-key-file=/etc/tls/private/tls.key
         - --tls-client-ca-file=/etc/tls/certs/service-ca.crt
         image: ghcr.io/pyrra-dev/pyrra:v0.9.0
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9099
         name: pyrra
         ports:
         - containerPort: 9099
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9099
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

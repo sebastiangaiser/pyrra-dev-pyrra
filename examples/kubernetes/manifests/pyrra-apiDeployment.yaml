@@ -30,9 +30,17 @@ spec:
         - --api-url=http://pyrra-kubernetes.monitoring.svc.cluster.local:9444
         - --prometheus-url=http://prometheus-k8s.monitoring.svc.cluster.local:9090
         image: ghcr.io/pyrra-dev/pyrra:v0.9.0
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9099
         name: pyrra
         ports:
         - containerPort: 9099
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9099
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

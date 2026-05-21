@@ -26,6 +26,7 @@
     replicas:: 1,
     port:: 9099,
     webhookPort:: 9443,
+    healthPort:: 8081,
 
     commonLabels:: {
       'app.kubernetes.io/name': 'pyrra',
@@ -84,6 +85,12 @@
         ],
         // resources: pyrra._config.resources,
         ports: [{ containerPort: pyrra._config.port }],
+        livenessProbe: {
+          httpGet: { path: '/healthz', port: pyrra._config.port },
+        },
+        readinessProbe: {
+          httpGet: { path: '/readyz', port: pyrra._config.port },
+        },
         securityContext: {
           allowPrivilegeEscalation: false,
           readOnlyRootFilesystem: true,
@@ -208,6 +215,7 @@
       spec: {
         ports: [
           { name: 'metrics', targetPort: 8080, port: 8080 },
+          { name: 'health', targetPort: pyrra._config.healthPort, port: pyrra._config.healthPort },
           { name: 'http', targetPort: 9444, port: 9444 },
           { name: 'webhooks', targetPort: 9443, port: 9443 },
         ],
@@ -225,8 +233,15 @@
         // resources: pyrra._config.resources,
         ports: [
           { name: 'http', containerPort: pyrra._config.port },
-          { name: 'webhooks', containerPort: pyrra._config.webhookPort }
+          { name: 'webhooks', containerPort: pyrra._config.webhookPort },
+          { name: 'health', containerPort: pyrra._config.healthPort },
         ],
+        livenessProbe: {
+          httpGet: { path: '/healthz', port: 'health' },
+        },
+        readinessProbe: {
+          httpGet: { path: '/readyz', port: 'health' },
+        },
         securityContext: {
           allowPrivilegeEscalation: false,
           readOnlyRootFilesystem: true,

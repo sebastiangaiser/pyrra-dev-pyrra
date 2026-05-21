@@ -125,7 +125,7 @@ func init() {
 
 func cmdKubernetes(
 	logger log.Logger,
-	metricsAddr string,
+	metricsAddr, healthProbeAddr string,
 	configMapMode, genericRules, disableWebhooks bool,
 	certFile, privateKeyFile string,
 	mimirClient *mimir.Client,
@@ -145,6 +145,7 @@ func cmdKubernetes(
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},
+		HealthProbeBindAddress:  healthProbeAddr,
 		WebhookServer:           webhookServer,
 		LeaderElection:          enableLeaderElection,
 		LeaderElectionID:        "9d76195a.pyrra.dev",
@@ -188,14 +189,26 @@ func cmdKubernetes(
 	)
 	gr.Add(run.SignalHandler(ctx, os.Interrupt, syscall.SIGTERM))
 
+	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("apiserver", func(req *http.Request) error {
+		reqCtx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
+		defer cancel()
+		var list pyrrav1alpha1.ServiceLevelObjectiveList
+		return mgr.GetAPIReader().List(reqCtx, &list, client.Limit(1))
+	}); err != nil {
+		setupLog.Error(err, "unable to set up apiserver ready check")
+		os.Exit(1)
+	}
+
 	{
 		gr.Add(func() error {
-			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-				return fmt.Errorf("unable to set up health check: %w", err)
-			}
-			if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-				return fmt.Errorf("unable to set up ready check: %w", err)
-			}
 			setupLog.Info("starting manager")
 			return mgr.Start(ctx)
 		}, func(_ error) {

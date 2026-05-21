@@ -87,6 +87,7 @@ var CLI struct {
 	} `cmd:"" help:"Runs Pyrra's filesystem operator and backend for the API."`
 	Kubernetes struct {
 		MetricsAddr                string   `default:":8080" help:"The address the metric endpoint binds to."`
+		HealthProbeAddr            string   `default:":8081" help:"The address the health probe endpoints (/healthz, /readyz) bind to."`
 		ConfigMapMode              bool     `default:"false" help:"If the generated recording rules should instead be saved to config maps in the default Prometheus format."`
 		GenericRules               bool     `default:"false" help:"Enabled generic recording rules generation to make it easier for tools like Grafana."`
 		DisableWebhooks            bool     `default:"true" env:"DISABLE_WEBHOOKS" help:"Disable webhooks so the controller doesn't try to read certificates"`
@@ -268,6 +269,7 @@ func main() {
 		code = cmdKubernetes(
 			logger,
 			CLI.Kubernetes.MetricsAddr,
+			CLI.Kubernetes.HealthProbeAddr,
 			CLI.Kubernetes.ConfigMapMode,
 			CLI.Kubernetes.GenericRules,
 			CLI.Kubernetes.DisableWebhooks,
@@ -358,6 +360,9 @@ func cmdAPI(
 			"Connect-Protocol-Version",
 		},
 	})) // TODO: Disable by default
+
+	r.Get("/healthz", okHandler)
+	r.Get("/readyz", okHandler)
 
 	prometheusInterceptor := connectprometheus.NewInterceptor(reg)
 
@@ -493,6 +498,10 @@ func cmdAPI(
 		return 2
 	}
 	return 0
+}
+
+func okHandler(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
 func newBackendClientCache(client objectivesv1alpha1connect.ObjectiveBackendServiceClient) objectivesv1alpha1connect.ObjectiveBackendServiceClient {

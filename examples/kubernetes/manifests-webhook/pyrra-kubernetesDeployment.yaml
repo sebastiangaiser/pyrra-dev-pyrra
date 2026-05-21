@@ -29,12 +29,22 @@ spec:
         - kubernetes
         - --disable-webhooks=false
         image: ghcr.io/pyrra-dev/pyrra:v0.9.0
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
         name: pyrra
         ports:
         - containerPort: 9099
           name: http
         - containerPort: 9443
           name: webhooks
+        - containerPort: 8081
+          name: health
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
