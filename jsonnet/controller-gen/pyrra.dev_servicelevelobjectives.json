@@ -293,11 +293,23 @@
                   },
                   "target": {
                     "description": "Target is a string that's casted to a float64 between 0 - 100.\nIt represents the desired availability of the service in the given window.\nfloat64 are not supported: https://github.com/kubernetes-sigs/controller-tools/issues/245",
-                    "type": "string"
+                    "type": "string",
+                    "x-kubernetes-validations": [
+                      {
+                        "message": "target must be between 0 and 100",
+                        "rule": "self.matches(r'^[0-9]+(\\.[0-9]+)?$') && double(self) >= 0.0 && double(self) <= 100.0"
+                      }
+                    ]
                   },
                   "window": {
                     "description": "Window within which the Target is supposed to be kept. Usually something like 1d, 7d or 28d.",
-                    "type": "string"
+                    "type": "string",
+                    "x-kubernetes-validations": [
+                      {
+                        "message": "window must be a Prometheus duration like 1d, 7d or 28d",
+                        "rule": "self.matches(r'^([0-9]+(ms|s|m|h|d|w|y))+$')"
+                      }
+                    ]
                   }
                 },
                 "required": [

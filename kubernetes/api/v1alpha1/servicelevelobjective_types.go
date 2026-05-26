@@ -77,9 +77,11 @@ type ServiceLevelObjectiveSpec struct {
 	// Target is a string that's casted to a float64 between 0 - 100.
 	// It represents the desired availability of the service in the given window.
 	// float64 are not supported: https://github.com/kubernetes-sigs/controller-tools/issues/245
+	// +kubebuilder:validation:XValidation:rule="self.matches(r'^[0-9]+(\\.[0-9]+)?$') && double(self) >= 0.0 && double(self) <= 100.0",message="target must be between 0 and 100"
 	Target string `json:"target"`
 
 	// Window within which the Target is supposed to be kept. Usually something like 1d, 7d or 28d.
+	// +kubebuilder:validation:XValidation:rule="self.matches(r'^([0-9]+(ms|s|m|h|d|w|y))+$')",message="window must be a Prometheus duration like 1d, 7d or 28d"
 	Window string `json:"window"`
 
 	// ServiceLevelIndicator is the underlying data source that indicates how the service is doing.
