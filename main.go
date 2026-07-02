@@ -37,8 +37,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/pyrra-dev/pyrra/mimir"
@@ -473,10 +471,16 @@ func cmdAPI(
 	gr.Add(run.SignalHandler(ctx, os.Interrupt, syscall.SIGTERM))
 
 	{
+		protocols := new(http.Protocols)
+		protocols.SetHTTP1(true)
+		protocols.SetHTTP2(true)
+		protocols.SetUnencryptedHTTP2(true)
+
 		httpServer := &http.Server{
 			Addr:      ":9099",
-			Handler:   h2c.NewHandler(r, &http2.Server{}),
+			Handler:   r,
 			TLSConfig: &tls.Config{},
+			Protocols: protocols,
 		}
 		gr.Add(
 			func() error {

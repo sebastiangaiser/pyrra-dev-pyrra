@@ -33,8 +33,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -222,9 +220,15 @@ func cmdKubernetes(
 			pyrraURL: pyrraURL,
 		}))
 
+		protocols := new(http.Protocols)
+		protocols.SetHTTP1(true)
+		protocols.SetHTTP2(true)
+		protocols.SetUnencryptedHTTP2(true)
+
 		server := http.Server{
-			Addr:    ":9444",
-			Handler: h2c.NewHandler(router, &http2.Server{}),
+			Addr:      ":9444",
+			Handler:   router,
+			Protocols: protocols,
 		}
 
 		gr.Add(func() error {
