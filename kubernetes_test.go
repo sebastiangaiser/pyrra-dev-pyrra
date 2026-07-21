@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/durationpb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -123,6 +124,39 @@ func TestObjectiveServer_ListObjectives(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, response.Msg.Objectives, len(tc.response))
 			require.Equal(t, tc.response, response.Msg.Objectives)
+		})
+	}
+}
+
+func TestNamespacesConfig(t *testing.T) {
+	testcases := []struct {
+		name       string
+		namespaces []string
+		expected   map[string]cache.Config
+	}{{
+		name:       "nil",
+		namespaces: nil,
+		expected:   nil,
+	}, {
+		name:       "empty",
+		namespaces: []string{""},
+		expected:   nil,
+	}, {
+		name:       "single",
+		namespaces: []string{"default"},
+		expected:   map[string]cache.Config{"default": {}},
+	}, {
+		name:       "multiple",
+		namespaces: []string{"default", "monitoring"},
+		expected:   map[string]cache.Config{"default": {}, "monitoring": {}},
+	}, {
+		name:       "skipsEmpty",
+		namespaces: []string{"default", "", "monitoring"},
+		expected:   map[string]cache.Config{"default": {}, "monitoring": {}},
+	}}
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, namespacesConfig(tc.namespaces))
 		})
 	}
 }

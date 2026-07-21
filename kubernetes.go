@@ -135,33 +135,30 @@ func cmdKubernetes(
 	pyrraExternalURL *url.URL,
 	enableLeaderElection bool,
 	leaderElectionNamespace string,
-	namespace string,
+	namespaces []string,
 ) int {
 	setupLog := ctrl.Log.WithName("setup")
 	ctrl.SetLogger(newGoKitLogr(logger))
 
 	webhookServer := webhook.NewServer(webhook.Options{Port: 9443})
 
-	opts := ctrl.Options{
+	cacheOptions := cache.Options{}
+	if defaultNamespaces := namespacesConfig(namespaces); len(defaultNamespaces) > 0 {
+		setupLog.Info("restricting watch to namespaces", "namespaces", namespaces)
+		cacheOptions.DefaultNamespaces = defaultNamespaces
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},
+		Cache:                   cacheOptions,
 		WebhookServer:           webhookServer,
 		LeaderElection:          enableLeaderElection,
 		LeaderElectionID:        "9d76195a.pyrra.dev",
 		LeaderElectionNamespace: leaderElectionNamespace,
-	}
-
-	if namespace != "" {
-		opts.Cache = cache.Options{
-			DefaultNamespaces: map[string]cache.Config{
-				namespace: {},
-			},
-		}
-	}
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), opts)
+	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -217,9 +214,8 @@ func cmdKubernetes(
 	{
 		router := http.NewServeMux()
 		router.Handle(objectivesv1alpha1connect.NewObjectiveBackendServiceHandler(&KubernetesObjectiveServer{
-			client:    mgr.GetClient(),
-			pyrraURL:  pyrraURL,
-			namespace: namespace,
+			client:   mgr.GetClient(),
+			pyrraURL: pyrraURL,
 		}))
 
 		server := http.Server{
@@ -251,14 +247,27 @@ func cmdKubernetes(
 	return 0
 }
 
+func namespacesConfig(namespaces []string) map[string]cache.Config {
+	defaultNamespaces := make(map[string]cache.Config, len(namespaces))
+	for _, namespace := range namespaces {
+		if namespace == "" {
+			continue
+		}
+		defaultNamespaces[namespace] = cache.Config{}
+	}
+	if len(defaultNamespaces) == 0 {
+		return nil
+	}
+	return defaultNamespaces
+}
+
 type KubernetesClient interface {
 	List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
 }
 
 type KubernetesObjectiveServer struct {
-	client    KubernetesClient
-	pyrraURL  string
-	namespace string
+	client   KubernetesClient
+	pyrraURL string
 }
 
 func (s *KubernetesObjectiveServer) List(ctx context.Context, req *connect.Request[objectivesv1alpha1.ListRequest]) (*connect.Response[objectivesv1alpha1.ListResponse], error) {
@@ -285,20 +294,10 @@ func (s *KubernetesObjectiveServer) List(ctx context.Context, req *connect.Reque
 	}
 
 	listOpts := client.ListOptions{}
-
-	if s.namespace != "" {
-		if namespaceMatcher != nil && namespaceMatcher.Type == labels.MatchEqual && namespaceMatcher.Value != s.namespace {
-			return connect.NewResponse(&objectivesv1alpha1.ListResponse{
-				Objectives: []*objectivesv1alpha1.Objective{},
-			}), nil
-		}
-		listOpts.Namespace = s.namespace
-	} else {
-		for _, m := range matchers {
-			if m.Name == "namespace" && m.Type == labels.MatchEqual {
-				listOpts.Namespace = m.Value
-				break
-			}
+	for _, m := range matchers {
+		if m.Name == "namespace" && m.Type == labels.MatchEqual {
+			listOpts.Namespace = m.Value
+			break
 		}
 	}
 

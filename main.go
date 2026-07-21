@@ -103,7 +103,7 @@ var CLI struct {
 		ExternalURL                *url.URL `default:"" help:"The URL for Pyrra to be included in alert annotations. This will be used to generate direct links to the Pyrra UI in alerts."`
 		EnableLeaderElection       bool     `default:"false" help:"Enable leader election for controller manager to enable running multiple replicas."`
 		LeaderElectionNamespace    string   `default:"" help:"Namespace used to perform leader election. Defaults to the namespace the controller is running in."`
-		Namespace                  string   `default:"" help:"Namespace to watch. Empty means all namespaces."`
+		Namespaces                 []string `default:"" help:"Comma-separated list of namespaces to watch for ServiceLevelObjectives. Defaults to all namespaces when unset."`
 	} `cmd:"" help:"Runs Pyrra's Kubernetes operator and backend for the API."`
 	Generate struct {
 		ConfigFiles                string   `default:"/etc/pyrra/*.yaml" help:"The folder where Pyrra finds the config files to use."`
@@ -280,7 +280,7 @@ func main() {
 			CLI.Kubernetes.ExternalURL,
 			CLI.Kubernetes.EnableLeaderElection,
 			CLI.Kubernetes.LeaderElectionNamespace,
-			CLI.Kubernetes.Namespace,
+			CLI.Kubernetes.Namespaces,
 		)
 	case "generate":
 		code = cmdGenerate(
